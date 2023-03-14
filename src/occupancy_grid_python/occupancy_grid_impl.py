@@ -6,6 +6,8 @@ from map_msgs.msg import OccupancyGridUpdate
 import numpy as np
 from itertools import product
 
+from IPython import embed 
+
 """
 Class to deal with OccupancyGrid in Python
 as in local / global costmaps.
@@ -23,6 +25,8 @@ class OccupancyGridManager(object):
         self._sub = rospy.Subscriber(topic, OccupancyGrid,
                                      self._occ_grid_cb,
                                      queue_size=1)
+        
+        self._pub = rospy.Publisher(topic, OccupancyGrid)
         if subscribe_to_updates:
             rospy.loginfo("Subscribing to updates!")
             self._updates_sub = rospy.Subscriber(topic + '_updates',
@@ -64,7 +68,7 @@ class OccupancyGridManager(object):
         return self._reference_frame
 
     def _occ_grid_cb(self, data):
-        rospy.loginfo("Got a full OccupancyGrid update")
+        # rospy.loginfo("Got a full OccupancyGrid update")
         self._occ_grid_metadata = data.info
         # Contains resolution, width & height
         # np.set_printoptions(threshold=99999999999, linewidth=200)
@@ -77,7 +81,7 @@ class OccupancyGridManager(object):
         # print(self._grid_data)
 
     def _occ_grid_update_cb(self, data):
-        rospy.loginfo("Got a partial OccupancyGrid update")
+        # rospy.loginfo("Got a partial OccupancyGrid update")
         # x, y origin point of the update
         # width and height of the update
         # data, the update
@@ -229,8 +233,9 @@ class OccupancyGridManager(object):
 
 if __name__ == '__main__':
     rospy.init_node('test_occ_grid')
-    ogm = OccupancyGridManager('/move_base_flex/global_costmap/costmap',
+    ogm = OccupancyGridManager('/kmriiwa/move_base/global_costmap/costmap',
                                subscribe_to_updates=True)
+    embed()
     wx1, wy1 = ogm.get_world_x_y(0, 0)
     print("world from costmap coords  0 0: ")
     print((wx1, wy1))
@@ -285,4 +290,4 @@ if __name__ == '__main__':
         for j in l:
             accum += str(ogm.get_cost_from_costmap_x_y(i, j)) + ' '
             # print(ogm.get_cost_from_costmap_x_y(i, 270))
-        print accum
+        print(accum)
