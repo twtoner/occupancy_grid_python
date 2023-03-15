@@ -5,6 +5,7 @@ from nav_msgs.msg import OccupancyGrid
 from map_msgs.msg import OccupancyGridUpdate
 import numpy as np
 from itertools import product
+from copy import deepcopy
 
 from IPython import embed 
 
@@ -22,11 +23,14 @@ class OccupancyGridManager(object):
         self._grid_data = None
         self._occ_grid_metadata = None
         self._reference_frame = None
+        self._costmap = None
+        self._costmap_update = None
         self._sub = rospy.Subscriber(topic, OccupancyGrid,
                                      self._occ_grid_cb,
                                      queue_size=1)
-        
-        self._pub = rospy.Publisher(topic, OccupancyGrid)
+
+        self._pub = rospy.Publisher(topic, OccupancyGrid, queue_size=1)
+
         if subscribe_to_updates:
             rospy.loginfo("Subscribing to updates!")
             self._updates_sub = rospy.Subscriber(topic + '_updates',
@@ -67,8 +71,40 @@ class OccupancyGridManager(object):
     def reference_frame(self):
         return self._reference_frame
 
-    def _occ_grid_cb(self, data):
+    def clear_costmap(self, value=0):
+        new_costmap = deepcopy(self._costmap) 
+        new_costmap.data = [value] * len(new_costmap.data)
+        new_costmap.header.stamp = rospy.Time.now()
+        self._pub.publish(new_costmap)
+
+    def update_costmap_x_y(self, x, y, cost):
+        new_costmap = deepcopy(self._costmap)   # TODO: double check that this message isn't just empty
+        new_cm_array = np.array(new_costmap.data,
+                                dtype=np.int8).reshape(self.height, self.width)
+        cx, cy = self.get_costmap_x_y(x, y)
+        new_cm_array[cy,cx] = cost
+        new_cm_data = tuple(new_cm_array.reshape(-1,))
+        new_costmap.data = new_cm_data
+        new_costmap.header.stamp = rospy.Time.now()
+        self._pub.publish(new_costmap)
+
+    def update_costmap_xy_range(self, x_array, y_array, cost):
+        new_costmap = deepcopy(self._costmap)   # TODO: double check that this message isn't just empty
+        new_cm_array = np.array(new_costmap.data,
+                                dtype=np.int8).reshape(self.height, self.width)
+        for x in x_array:
+            for y in y_array:
+                cx, cy = self.get_costmap_x_y(x,y)
+                new_cm_array[cy, cx] = cost
+        new_cm_data = tuple(new_cm_array.reshape(-1,))
+        new_costmap.data = new_cm_data
+        new_costmap.header.stamp = rospy.Time.now()
+        self._pub.publish(new_costmap)
+
+
+    def _occ_grid_cb(self, data: OccupancyGrid):
         # rospy.loginfo("Got a full OccupancyGrid update")
+        self._costmap = data
         self._occ_grid_metadata = data.info
         # Contains resolution, width & height
         # np.set_printoptions(threshold=99999999999, linewidth=200)
@@ -78,10 +114,12 @@ class OccupancyGridManager(object):
                                    dtype=np.int8).reshape(data.info.height,
                                                           data.info.width)
         self._reference_frame = data.header.frame_id
+        
         # print(self._grid_data)
 
-    def _occ_grid_update_cb(self, data):
+    def _occ_grid_update_cb(self, data: OccupancyGridUpdate):
         # rospy.loginfo("Got a partial OccupancyGrid update")
+        self._costmap_update = data
         # x, y origin point of the update
         # width and height of the update
         # data, the update
@@ -91,6 +129,13 @@ class OccupancyGridManager(object):
                            dtype=np.int8).reshape(data.height, data.width)
         self._grid_data[data.y:data.y +
                         data.height, data.x:data.x + data.width] = data_np
+
+        # new_costmap = copy(self._costmap)
+        # new_cm_data = np.array(new_costmap.data)
+        # new_cm_data = 0*new_cm_data + 100
+        # new_costmap.data = tuple(new_cm_data)
+        # self._pub.publish(new_costmap)
+
         # print(self._grid_data)
 
     def get_world_x_y(self, costmap_x, costmap_y):
